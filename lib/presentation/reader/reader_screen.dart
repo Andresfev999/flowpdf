@@ -12,6 +12,13 @@ import '../../data/repositories/book_repository.dart';
 import '../../data/services/pdf_service.dart';
 import 'widgets/appearance_bottom_sheet.dart';
 
+enum PageTransitionDirection {
+  horizontalForward,
+  horizontalBackward,
+  verticalForward,
+  verticalBackward,
+}
+
 class ReaderScreen extends StatefulWidget {
   final Book book;
   final BookRepository bookRepository;
@@ -38,6 +45,7 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
   bool _isExtractingFlowText = false;
   late ScrollController _flowScrollController;
   double _overscrollAccumulator = 0;
+  PageTransitionDirection _transitionDirection = PageTransitionDirection.horizontalForward;
 
   @override
   void initState() {
@@ -90,9 +98,15 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
     }
   }
 
-  void _onPageChanged(int newPage) {
+  void _onPageChanged(int newPage, [PageTransitionDirection? direction]) {
     if (newPage < 1 || newPage > widget.book.totalPages) return;
+    
+    final effectiveDir = direction ?? (newPage > _currentPage
+        ? PageTransitionDirection.horizontalForward
+        : PageTransitionDirection.horizontalBackward);
+
     setState(() {
+      _transitionDirection = effectiveDir;
       _currentPage = newPage;
     });
     widget.bookRepository.updateProgress(widget.book.id, newPage);
@@ -503,7 +517,9 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
                 Expanded(
                   flex: 3,
                   child: ElevatedButton.icon(
-                    onPressed: _currentPage > 1 ? () => _onPageChanged(_currentPage - 1) : null,
+                    onPressed: _currentPage > 1
+                        ? () => _onPageChanged(_currentPage - 1, PageTransitionDirection.horizontalBackward)
+                        : null,
                     icon: const Icon(Icons.chevron_left_rounded, size: 22),
                     label: const Text(
                       'Anterior',
@@ -561,7 +577,7 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
                   flex: 3,
                   child: ElevatedButton.icon(
                     onPressed: _currentPage < widget.book.totalPages
-                        ? () => _onPageChanged(_currentPage + 1)
+                        ? () => _onPageChanged(_currentPage + 1, PageTransitionDirection.horizontalForward)
                         : null,
                     iconAlignment: IconAlignment.end,
                     icon: const Icon(Icons.chevron_right_rounded, size: 22),
@@ -665,55 +681,31 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
               _overscrollAccumulator = 0;
             } else if (notification is OverscrollNotification) {
               _overscrollAccumulator += notification.overscroll;
-              if (_overscrollAccumulator > 18 && _currentPage < widget.book.totalPages) {
-                _onPageChanged(_currentPage + 1);
-                _overscrollAccumulator = 0;
-                return true;
-              } else if (_overscrollAccumulator < -18 && _currentPage > 1) {
-                _onPageChanged(_currentPage - 1);
-                _overscrollAccumulator = 0;
-                return true;
-              }
-            } else if (notification is ScrollUpdateNotification) {
-              // Si el usuario llega al final de la página y arrastra hacia arriba
-              if (notification.metrics.extentAfter <= 1.0) {
-                if (notification.scrollDelta != null && notification.scrollDelta! > 10 && _currentPage < widget.book.totalPages) {
-                  _onPageChanged(_currentPage + 1);
-                  return true;
-                }
-              }
-              // Si está al inicio y arrastra hacia abajo
-              if (notification.metrics.extentBefore <= 1.0) {
-                if (notification.scrollDelta != null && notification.scrollDelta! < -10 && _currentPage > 1) {
-                  _onPageChanged(_currentPage - 1);
-                  return true;
-                }
-              }
             } else if (notification is ScrollEndNotification) {
-              // 1. Al llegar al final de la página y deslizar hacia arriba -> Siguiente página
-              if (_overscrollAccumulator > 10 && _currentPage < widget.book.totalPages) {
-                _onPageChanged(_currentPage + 1);
+              // 1. Al llegar al final de la página y hacer un swipe vertical intencional hacia arriba
+              if (_overscrollAccumulator > 75 && _currentPage < widget.book.totalPages) {
+                _onPageChanged(_currentPage + 1, PageTransitionDirection.verticalForward);
                 _overscrollAccumulator = 0;
                 return true;
               }
-              // 2. Al estar al inicio de la página y deslizar hacia abajo -> Página anterior
-              else if (_overscrollAccumulator < -10 && _currentPage > 1) {
-                _onPageChanged(_currentPage - 1);
+              // 2. Al estar al inicio de la página y hacer un swipe vertical intencional hacia abajo
+              else if (_overscrollAccumulator < -75 && _currentPage > 1) {
+                _onPageChanged(_currentPage - 1, PageTransitionDirection.verticalBackward);
                 _overscrollAccumulator = 0;
                 return true;
               }
-              // 3. O por velocidad de arrastre al límite vertical
+              // 3. O por velocidad de arrastre intencional (flick) al límite de la página
               final velocity = notification.dragDetails?.primaryVelocity;
               if (velocity != null) {
-                if (velocity < -100 &&
+                if (velocity < -350 &&
                     notification.metrics.pixels >= notification.metrics.maxScrollExtent &&
                     _currentPage < widget.book.totalPages) {
-                  _onPageChanged(_currentPage + 1);
+                  _onPageChanged(_currentPage + 1, PageTransitionDirection.verticalForward);
                   return true;
-                } else if (velocity > 100 &&
+                } else if (velocity > 350 &&
                     notification.metrics.pixels <= notification.metrics.minScrollExtent &&
                     _currentPage > 1) {
-                  _onPageChanged(_currentPage - 1);
+                  _onPageChanged(_currentPage - 1, PageTransitionDirection.verticalBackward);
                   return true;
                 }
               }
@@ -723,12 +715,12 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onHorizontalDragEnd: (details) {
-              // Swipe horizontal para cambio de página
+              // Swipe horizontal con velocidad intencional
               if (details.primaryVelocity != null) {
-                if (details.primaryVelocity! < -200 && _currentPage < widget.book.totalPages) {
-                  _onPageChanged(_currentPage + 1);
-                } else if (details.primaryVelocity! > 200 && _currentPage > 1) {
-                  _onPageChanged(_currentPage - 1);
+                if (details.primaryVelocity! < -250 && _currentPage < widget.book.totalPages) {
+                  _onPageChanged(_currentPage + 1, PageTransitionDirection.horizontalForward);
+                } else if (details.primaryVelocity! > 250 && _currentPage > 1) {
+                  _onPageChanged(_currentPage - 1, PageTransitionDirection.horizontalBackward);
                 }
               }
             },
@@ -740,11 +732,44 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
                 vertical: 24,
               ),
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: child,
+                duration: const Duration(milliseconds: 280),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  Offset startOffset;
+                  switch (_transitionDirection) {
+                    case PageTransitionDirection.verticalForward:
+                      // Pasa a la siguiente página verticalmente (entra desde abajo hacia arriba)
+                      startOffset = const Offset(0.0, 0.35);
+                      break;
+                    case PageTransitionDirection.verticalBackward:
+                      // Pasa a la página anterior verticalmente (entra desde arriba hacia abajo)
+                      startOffset = const Offset(0.0, -0.35);
+                      break;
+                    case PageTransitionDirection.horizontalForward:
+                      // Pasa a la siguiente página horizontalmente (entra desde la derecha)
+                      startOffset = const Offset(0.35, 0.0);
+                      break;
+                    case PageTransitionDirection.horizontalBackward:
+                      // Pasa a la página anterior horizontalmente (entra desde la izquierda)
+                      startOffset = const Offset(-0.35, 0.0);
+                      break;
+                  }
+
+                  final slideAnim = Tween<Offset>(
+                    begin: startOffset,
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  ));
+
+                  return SlideTransition(
+                    position: slideAnim,
+                    child: FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    ),
                   );
                 },
                 child: KeyedSubtree(
@@ -792,14 +817,11 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
                         Center(
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
-                            onTap: () => _onPageChanged(_currentPage + 1),
-                            onVerticalDragUpdate: (details) {
-                              if (details.primaryDelta != null && details.primaryDelta! < -8) {
-                                _onPageChanged(_currentPage + 1);
-                              }
-                            },
+                            onTap: () => _onPageChanged(_currentPage + 1, PageTransitionDirection.verticalForward),
                             onVerticalDragEnd: (details) {
-                              _onPageChanged(_currentPage + 1);
+                              if (details.primaryVelocity == null || details.primaryVelocity! <= 0) {
+                                _onPageChanged(_currentPage + 1, PageTransitionDirection.verticalForward);
+                              }
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
