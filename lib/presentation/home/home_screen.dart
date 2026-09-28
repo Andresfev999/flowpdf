@@ -151,7 +151,7 @@ class HomeScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Hola 👋',
+            'Hola mi vida ❤️',
             style: GoogleFonts.inter(
               fontSize: 26,
               fontWeight: FontWeight.w800,

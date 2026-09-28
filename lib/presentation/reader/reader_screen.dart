@@ -36,15 +36,24 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
   // Flow Mode State
   String _flowPageText = '';
   bool _isExtractingFlowText = false;
+  late ScrollController _flowScrollController;
+  double _overscrollAccumulator = 0;
 
   @override
   void initState() {
     super.initState();
     _currentPage = widget.book.currentPage.clamp(1, widget.book.totalPages);
     _pdfViewerController = PdfViewerController();
+    _flowScrollController = ScrollController();
     _settings = ReadingSettings.defaultSettings(widget.book.id);
 
     _loadInitialState();
+  }
+
+  @override
+  void dispose() {
+    _flowScrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadInitialState() async {
@@ -89,6 +98,9 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
     widget.bookRepository.updateProgress(widget.book.id, newPage);
 
     if (_settings.readingMode == 'flow') {
+      if (_flowScrollController.hasClients) {
+        _flowScrollController.jumpTo(0.0);
+      }
       _loadFlowPageText(newPage);
     } else {
       _pdfViewerController.jumpToPage(newPage);
@@ -647,67 +659,207 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
       width: double.infinity,
       height: double.infinity,
       child: SafeArea(
-        child: GestureDetector(
-          onHorizontalDragEnd: (details) {
-            // Swipe para cambio de página
-            if (details.primaryVelocity != null) {
-              if (details.primaryVelocity! < -200 && _currentPage < widget.book.totalPages) {
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (ScrollNotification notification) {
+            if (notification is ScrollStartNotification) {
+              _overscrollAccumulator = 0;
+            } else if (notification is OverscrollNotification) {
+              _overscrollAccumulator += notification.overscroll;
+              if (_overscrollAccumulator > 18 && _currentPage < widget.book.totalPages) {
                 _onPageChanged(_currentPage + 1);
-              } else if (details.primaryVelocity! > 200 && _currentPage > 1) {
+                _overscrollAccumulator = 0;
+                return true;
+              } else if (_overscrollAccumulator < -18 && _currentPage > 1) {
                 _onPageChanged(_currentPage - 1);
+                _overscrollAccumulator = 0;
+                return true;
+              }
+            } else if (notification is ScrollUpdateNotification) {
+              // Si el usuario llega al final de la página y arrastra hacia arriba
+              if (notification.metrics.extentAfter <= 1.0) {
+                if (notification.scrollDelta != null && notification.scrollDelta! > 10 && _currentPage < widget.book.totalPages) {
+                  _onPageChanged(_currentPage + 1);
+                  return true;
+                }
+              }
+              // Si está al inicio y arrastra hacia abajo
+              if (notification.metrics.extentBefore <= 1.0) {
+                if (notification.scrollDelta != null && notification.scrollDelta! < -10 && _currentPage > 1) {
+                  _onPageChanged(_currentPage - 1);
+                  return true;
+                }
+              }
+            } else if (notification is ScrollEndNotification) {
+              // 1. Al llegar al final de la página y deslizar hacia arriba -> Siguiente página
+              if (_overscrollAccumulator > 10 && _currentPage < widget.book.totalPages) {
+                _onPageChanged(_currentPage + 1);
+                _overscrollAccumulator = 0;
+                return true;
+              }
+              // 2. Al estar al inicio de la página y deslizar hacia abajo -> Página anterior
+              else if (_overscrollAccumulator < -10 && _currentPage > 1) {
+                _onPageChanged(_currentPage - 1);
+                _overscrollAccumulator = 0;
+                return true;
+              }
+              // 3. O por velocidad de arrastre al límite vertical
+              final velocity = notification.dragDetails?.primaryVelocity;
+              if (velocity != null) {
+                if (velocity < -100 &&
+                    notification.metrics.pixels >= notification.metrics.maxScrollExtent &&
+                    _currentPage < widget.book.totalPages) {
+                  _onPageChanged(_currentPage + 1);
+                  return true;
+                } else if (velocity > 100 &&
+                    notification.metrics.pixels <= notification.metrics.minScrollExtent &&
+                    _currentPage > 1) {
+                  _onPageChanged(_currentPage - 1);
+                  return true;
+                }
               }
             }
+            return false;
           },
-          child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(
-              horizontal: _settings.margin,
-              vertical: 24,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Encabezado de página
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'PÁGINA $_currentPage DE ${widget.book.totalPages}',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        letterSpacing: 1.5,
-                        fontWeight: FontWeight.bold,
-                        color: readerTheme.secondaryColor,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragEnd: (details) {
+              // Swipe horizontal para cambio de página
+              if (details.primaryVelocity != null) {
+                if (details.primaryVelocity! < -200 && _currentPage < widget.book.totalPages) {
+                  _onPageChanged(_currentPage + 1);
+                } else if (details.primaryVelocity! > 200 && _currentPage > 1) {
+                  _onPageChanged(_currentPage - 1);
+                }
+              }
+            },
+            child: SingleChildScrollView(
+              controller: _flowScrollController,
+              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+              padding: EdgeInsets.symmetric(
+                horizontal: _settings.margin,
+                vertical: 24,
+              ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey<int>(_currentPage),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Encabezado de página
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'PÁGINA $_currentPage DE ${widget.book.totalPages}',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              letterSpacing: 1.5,
+                              fontWeight: FontWeight.bold,
+                              color: readerTheme.secondaryColor,
+                            ),
+                          ),
+                          Text(
+                            '${((_currentPage / widget.book.totalPages) * 100).round()}% LEÍDO',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              letterSpacing: 1.2,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    Text(
-                      '${((_currentPage / widget.book.totalPages) * 100).round()}% LEÍDO',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        letterSpacing: 1.2,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryColor,
+                      const SizedBox(height: 20),
+
+                      // Contenido del Flow Engine con selección de texto nativa
+                      SelectableText(
+                        _flowPageText,
+                        style: textStyle,
+                        textAlign: TextAlign.justify,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
 
-                // Contenido del Flow Engine con selección de texto nativa
-                SelectableText(
-                  _flowPageText,
-                  style: textStyle,
-                  textAlign: TextAlign.justify,
-                ),
+                      const SizedBox(height: 32),
 
-                const SizedBox(height: 40),
-                Center(
-                  child: Text(
-                    '•  •  •',
-                    style: TextStyle(color: readerTheme.secondaryColor, fontSize: 16),
+                      // Botón / Indicador ergonómico para pasar a la siguiente página
+                      if (_currentPage < widget.book.totalPages) ...[
+                        Center(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _onPageChanged(_currentPage + 1),
+                            onVerticalDragUpdate: (details) {
+                              if (details.primaryDelta != null && details.primaryDelta! < -8) {
+                                _onPageChanged(_currentPage + 1);
+                              }
+                            },
+                            onVerticalDragEnd: (details) {
+                              _onPageChanged(_currentPage + 1);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).primaryColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: Theme.of(context).primaryColor.withValues(alpha: 0.35),
+                                  width: 1.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Theme.of(context).primaryColor.withValues(alpha: 0.12),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.arrow_upward_rounded,
+                                    size: 18,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Desliza hacia arriba para página ${_currentPage + 1}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: Theme.of(context).primaryColor,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 18,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      Center(
+                        child: Text(
+                          '•  •  •',
+                          style: TextStyle(color: readerTheme.secondaryColor, fontSize: 16),
+                        ),
+                      ),
+                      const SizedBox(height: 80),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 60),
-              ],
+              ),
             ),
           ),
         ),
