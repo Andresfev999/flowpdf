@@ -24,7 +24,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   bool _isSearching = false;
 
   List<Book> _filterBooks(List<Book> books) {
-    var filtered = books;
+    var filtered = List<Book>.from(books);
 
     // Búsqueda por texto
     if (_searchQuery.trim().isNotEmpty) {
@@ -47,6 +47,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
         break;
       case 'Todos':
       default:
+        final sortBy = widget.bookRepository.appSettings.librarySortBy;
+        if (sortBy == 'title') {
+          filtered.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        } else if (sortBy == 'progress') {
+          filtered.sort((a, b) => b.progress.compareTo(a.progress));
+        } else if (sortBy == 'dateAdded') {
+          filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        } else {
+          filtered.sort((a, b) => b.lastReadAt.compareTo(a.lastReadAt));
+        }
         break;
     }
 

@@ -21,37 +21,31 @@ void main() async {
   runApp(FlowPdfApp(bookRepository: bookRepository));
 }
 
-class FlowPdfApp extends StatefulWidget {
+class FlowPdfApp extends StatelessWidget {
   final BookRepository bookRepository;
 
   const FlowPdfApp({super.key, required this.bookRepository});
 
   @override
-  State<FlowPdfApp> createState() => _FlowPdfAppState();
-}
-
-class _FlowPdfAppState extends State<FlowPdfApp> {
-  ThemeMode _themeMode = ThemeMode.system;
-
-  void _updateThemeMode(ThemeMode mode) {
-    setState(() {
-      _themeMode = mode;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'FlowPDF',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: _themeMode,
-      home: MainNavigationScreen(
-        bookRepository: widget.bookRepository,
-        onThemeModeChanged: _updateThemeMode,
-        currentThemeMode: _themeMode,
-      ),
+    return ListenableBuilder(
+      listenable: bookRepository,
+      builder: (context, _) {
+        final settings = bookRepository.appSettings;
+        final currentThemeMode = settings.themeModeEnum;
+        final paletteId = settings.colorPalette;
+
+        return MaterialApp(
+          title: 'FlowPDF',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.getLightTheme(paletteId),
+          darkTheme: AppTheme.getDarkTheme(paletteId),
+          themeMode: currentThemeMode,
+          home: MainNavigationScreen(
+            bookRepository: bookRepository,
+          ),
+        );
+      },
     );
   }
 }

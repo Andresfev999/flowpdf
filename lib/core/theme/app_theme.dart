@@ -1,8 +1,79 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+class AppPalette {
+  final String id;
+  final String name;
+  final Color primary;
+  final Color accent;
+  final String description;
+
+  const AppPalette({
+    required this.id,
+    required this.name,
+    required this.primary,
+    required this.accent,
+    required this.description,
+  });
+}
+
 class AppTheme {
+  // Paletas de Colores Configurables (6 Paletas)
+  static const List<AppPalette> palettes = [
+    AppPalette(
+      id: 'indigo',
+      name: 'Índigo Flow',
+      primary: Color(0xFF6C63FF),
+      accent: Color(0xFF8B85FF),
+      description: 'Elegante, equilibrado y el color oficial de FlowPDF',
+    ),
+    AppPalette(
+      id: 'emerald',
+      name: 'Menta Esmeralda',
+      primary: Color(0xFF059669),
+      accent: Color(0xFF34D399),
+      description: 'Fresco, relajante y cómodo para largas lecturas',
+    ),
+    AppPalette(
+      id: 'ocean',
+      name: 'Azul Océano',
+      primary: Color(0xFF0284C7),
+      accent: Color(0xFF38BDF8),
+      description: 'Sereno, profundo y con enfoque profesional',
+    ),
+    AppPalette(
+      id: 'amber',
+      name: 'Ámbar & Sepia',
+      primary: Color(0xFFD97706),
+      accent: Color(0xFFFBBF24),
+      description: 'Cálido, tradicional y evocador de libros clásicos',
+    ),
+    AppPalette(
+      id: 'crimson',
+      name: 'Rosa Carmín',
+      primary: Color(0xFFE11D48),
+      accent: Color(0xFFFB7185),
+      description: 'Vibrante, inspirador y de alto impacto visual',
+    ),
+    AppPalette(
+      id: 'copper',
+      name: 'Cobre & Carbón',
+      primary: Color(0xFFEA580C),
+      accent: Color(0xFFFB923C),
+      description: 'Moderno, enérgico y con gran contraste en modo oscuro',
+    ),
+  ];
+
+  static AppPalette getPalette(String id) {
+    return palettes.firstWhere(
+      (p) => p.id == id,
+      orElse: () => palettes[0],
+    );
+  }
+
+  // Constantes de compatibilidad
   static const Color primaryColor = Color(0xFF6C63FF);
+  static const Color accentGreen = Color(0xFF10B981);
   static const Color lightBackground = Color(0xFFF7F7F8);
   static const Color lightSurface = Color(0xFFFFFFFF);
   static const Color lightText = Color(0xFF18181B);
@@ -63,12 +134,16 @@ class AppTheme {
     }
   }
 
-  static ThemeData get lightTheme {
+  static ThemeData getLightTheme([String paletteId = 'indigo']) {
+    final palette = getPalette(paletteId);
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      colorScheme: const ColorScheme.light(
-        primary: primaryColor,
+      primaryColor: palette.primary,
+      colorScheme: ColorScheme.light(
+        primary: palette.primary,
+        secondary: palette.accent,
         surface: lightSurface,
         onSurface: lightText,
       ),
@@ -84,22 +159,32 @@ class AppTheme {
           color: lightText,
         ),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: lightSurface,
-        selectedItemColor: primaryColor,
-        unselectedItemColor: secondaryText,
-        elevation: 8,
-        type: BottomNavigationBarType.fixed,
+      navigationBarTheme: NavigationBarThemeData(
+        indicatorColor: palette.primary.withOpacity(0.18),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return IconThemeData(color: palette.primary);
+          }
+          return const IconThemeData(color: secondaryText);
+        }),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: palette.primary,
+        foregroundColor: Colors.white,
       ),
     );
   }
 
-  static ThemeData get darkTheme {
+  static ThemeData getDarkTheme([String paletteId = 'indigo']) {
+    final palette = getPalette(paletteId);
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      colorScheme: const ColorScheme.dark(
-        primary: primaryColor,
+      primaryColor: palette.primary,
+      colorScheme: ColorScheme.dark(
+        primary: palette.primary,
+        secondary: palette.accent,
         surface: darkSurface,
         onSurface: darkText,
       ),
@@ -115,15 +200,24 @@ class AppTheme {
           color: darkText,
         ),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: darkSurface,
-        selectedItemColor: primaryColor,
-        unselectedItemColor: secondaryText,
-        elevation: 8,
-        type: BottomNavigationBarType.fixed,
+      navigationBarTheme: NavigationBarThemeData(
+        indicatorColor: palette.primary.withOpacity(0.25),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return IconThemeData(color: palette.accent);
+          }
+          return const IconThemeData(color: secondaryText);
+        }),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: palette.primary,
+        foregroundColor: Colors.white,
       ),
     );
   }
+
+  static ThemeData get lightTheme => getLightTheme('indigo');
+  static ThemeData get darkTheme => getDarkTheme('indigo');
 }
 
 class ReaderTheme {

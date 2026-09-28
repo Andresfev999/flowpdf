@@ -536,7 +536,7 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
                           style: GoogleFonts.inter(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: AppTheme.primaryColor,
+                            color: Theme.of(context).primaryColor,
                           ),
                         ),
                       ],
@@ -558,10 +558,10 @@ class _ReaderScreenState extends State<ReaderScreen> with SingleTickerProviderSt
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
+                      backgroundColor: Theme.of(context).primaryColor,
                       foregroundColor: Colors.white,
                       disabledForegroundColor: Colors.white54,
-                      disabledBackgroundColor: AppTheme.primaryColor.withValues(alpha: 0.4),
+                      disabledBackgroundColor: Theme.of(context).primaryColor.withValues(alpha: 0.4),
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
                       shape: RoundedRectangleBorder(

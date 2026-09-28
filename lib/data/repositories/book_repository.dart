@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/app_settings.dart';
 import '../models/book.dart';
 import '../models/bookmark.dart';
 import '../models/note.dart';
@@ -13,15 +14,18 @@ class BookRepository extends ChangeNotifier {
   static const String _bookmarksKey = 'flowpdf_bookmarks';
   static const String _notesKey = 'flowpdf_notes';
   static const String _settingsPrefix = 'flowpdf_settings_';
+  static const String _appSettingsKey = 'flowpdf_app_settings';
 
   List<Book> _books = [];
   List<Bookmark> _bookmarks = [];
   List<Note> _notes = [];
+  AppSettings _appSettings = AppSettings.defaultSettings();
   bool _isLoading = true;
 
   List<Book> get books => List.unmodifiable(_books);
   List<Bookmark> get bookmarks => List.unmodifiable(_bookmarks);
   List<Note> get notes => List.unmodifiable(_notes);
+  AppSettings get appSettings => _appSettings;
   bool get isLoading => _isLoading;
 
   Book? get lastReadBook {
@@ -38,6 +42,16 @@ class BookRepository extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       
+      // Cargar ajustes globales
+      final settingsJson = prefs.getString(_appSettingsKey);
+      if (settingsJson != null) {
+        try {
+          _appSettings = AppSettings.fromJson(jsonDecode(settingsJson));
+        } catch (e) {
+          debugPrint('Error parseando AppSettings: $e');
+        }
+      }
+
       // Cargar libros
       final booksJson = prefs.getString(_booksKey);
       if (booksJson != null) {
@@ -67,6 +81,34 @@ class BookRepository extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> updateAppSettings(AppSettings newSettings) async {
+    _appSettings = newSettings;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_appSettingsKey, jsonEncode(_appSettings.toJson()));
+    } catch (e) {
+      debugPrint('Error guardando AppSettings: $e');
+    }
+    notifyListeners();
+  }
+
+  Future<int> regenerateAllCovers() async {
+    int count = 0;
+    for (int i = 0; i < _books.length; i++) {
+      final book = _books[i];
+      final newCover = await PdfService.generateCover(book.filePath, book.id);
+      if (newCover != null) {
+        _books[i] = book.copyWith(coverPath: newCover);
+        count++;
+      }
+    }
+    if (count > 0) {
+      await _saveBooks();
+      notifyListeners();
+    }
+    return count;
   }
 
   Future<void> _checkAndGenerateMissingCovers() async {
@@ -161,7 +203,14 @@ class BookRepository extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error cargando ReadingSettings: $e');
     }
-    return ReadingSettings.defaultSettings(bookId);
+    return ReadingSettings(
+      id: 'settings_$bookId',
+      bookId: bookId,
+      fontFamily: _appSettings.preferredFontFamily,
+      fontSize: _appSettings.defaultFontSize,
+      theme: _appSettings.defaultReadingTheme,
+      readingMode: _appSettings.defaultReadingMode,
+    );
   }
 
   Future<void> saveSettingsForBook(ReadingSettings settings) async {
