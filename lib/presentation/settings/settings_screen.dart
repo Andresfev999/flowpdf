@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/services/update_checker_service.dart';
 import '../../data/models/app_settings.dart';
 import '../../data/repositories/book_repository.dart';
 
@@ -319,6 +320,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       leading: Icon(Icons.verified_outlined, color: AppTheme.secondaryText),
                       title: Text('Versión'),
                       subtitle: Text('1.0.0 (Oficial Release)'),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.system_update_rounded, color: AppTheme.primaryColor),
+                      title: const Text('Verificar actualización'),
+                      subtitle: const Text('Comprobar si hay una nueva versión de FlowPDF'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        UpdateCheckerService.checkUpdate(
+                          context,
+                          slug: 'flowpdf',
+                          currentVersionCode: 1,
+                          currentVersionName: '1.0.0',
+                          accentColor: AppTheme.primaryColor,
+                        );
+                      },
                     ),
                   ],
                 ),
