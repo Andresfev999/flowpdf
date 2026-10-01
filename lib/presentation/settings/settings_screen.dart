@@ -331,8 +331,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         UpdateCheckerService.checkUpdate(
                           context,
                           slug: 'flowpdf',
-                          currentVersionCode: 1,
-                          currentVersionName: '1.0.0',
+                          currentVersionCode: 3,
+                          currentVersionName: '1.0.2',
                           accentColor: AppTheme.primaryColor,
                         );
                       },
